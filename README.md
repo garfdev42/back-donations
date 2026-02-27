@@ -1,17 +1,20 @@
 # Donations API
 
-Backend para gestión de donaciones construido con NestJS, TypeORM y Stripe Checkout. Expone endpoints REST para crear donantes, donaciones y mensajes de contacto, e integra un flujo de pago seguro con Stripe.
+Backend para la gestión de donaciones de la prueba técnica de **Fundación Futuro Verde**.  
+Está construido con NestJS, TypeORM y Stripe Checkout, expone endpoints REST para crear donantes, donaciones y mensajes de contacto e integra un flujo de pago seguro con Stripe.
 
 ## Características
 
-- API REST con prefijo global `api`
-- Validación automática de DTOs
-- Formato de respuesta estandarizado `{ success, status, data }`
-- Donaciones con estado (`PENDING`, `COMPLETED`)
-- Integración con Stripe Checkout (URL de pago + Webhook)
-- Persistencia en PostgreSQL con TypeORM
+- **API REST** con prefijo global `api`
+- **Validación automática de DTOs** mediante `class-validator` y `class-transformer`
+- **Formato de respuesta estandarizado** `{ success, status, data }` a través de un interceptor global
+- **Modelo de dominio alineado al enunciado**: Donor, Donation, Contact
+- **Donaciones con estados** (`PENDING`, `COMPLETED`)
+- **Integración con Stripe Checkout** (creación de sesión de pago + webhook)
+- **Persistencia en PostgreSQL** usando TypeORM con `autoLoadEntities`
+- **Documentación OpenAPI/Swagger** disponible en `/api`
 
-## Stack Tecnológico
+## Stack tecnológico
 
 - NestJS 11
 - TypeORM 0.3.x
@@ -21,35 +24,46 @@ Backend para gestión de donaciones construido con NestJS, TypeORM y Stripe Chec
 
 ## Arquitectura
 
-- `src/modules/donors`: gestión de donantes
-- `src/modules/donations`: gestión de donaciones e integración con Stripe
-- `src/modules/contacts`: recepción de mensajes de contacto
+- `src/modules/donors`: gestión de donantes (creación y reutilización de donantes existentes)
+- `src/modules/donations`: gestión de donaciones e integración con Stripe Checkout
+- `src/modules/contacts`: recepción y consulta de mensajes de contacto
 - `src/modules/integration/stripe`: módulo adaptador para Stripe (servicio + webhook)
-- `src/common/interceptors/transform.interceptor.ts`: envoltura de respuestas
+- `src/common/interceptors/transform.interceptor.ts`: envoltura estándar de respuestas HTTP
+- `src/config/database.config.ts`: configuración de TypeORM; acepta `DATABASE_URL` (p. ej. en Render) o variables `DB_HOST`, `DB_PORT`, etc.
 
-## Requisitos Previos
+## Requisitos previos
 
 - Node.js 18+
-- PostgreSQL accesible
+- Base de datos PostgreSQL accesible
 - Cuenta de Stripe (modo test)
 
 ## Configuración (.env)
 
-Defina estas variables en `.env`:
+El archivo `.env` no debe subirse al repositorio (está en `.gitignore`).
 
-```
+**Conexión a base de datos:** la app admite dos formas:
+
+- **`DATABASE_URL`**: si está definida (p. ej. al enlazar la BD en Render), se usa esta URL y no hacen falta `DB_HOST`, etc.
+- **Variables sueltas**: si no hay `DATABASE_URL`, se usan `DB_HOST`, `DB_PORT`, `DB_USERNAME`, `DB_PASSWORD`, `DB_NAME`.
+
+Variables necesarias:
+
+```bash
 NODE_ENV=development
-DB_HOST=
-DB_PORT=
-DB_USERNAME=
-DB_PASSWORD=
-DB_NAME=
+DB_HOST=dpg-d6gv9794tr6s73bhn8d0-a
+DB_PORT=5432
+DB_USERNAME=donations_db_zorv_user
+DB_PASSWORD=<tu-password-de-render>
+DB_NAME=donations_db_zorv
 DB_SYNC=true
-
-STRIPE_SECRET_KEY=
+STRIPE_SECRET_KEY=<tu-stripe-secret-key>
+STRIPE_WEBHOOK_SECRET=<tu-stripe-webhook-secret>
 STRIPE_CURRENCY=usd
-STRIPE_WEBHOOK_SECRET=
+CORS_ORIGINS=https://fundacion-futuro-verde.vercel.app
+PORT=3000
 ```
+
+Sustituye `<tu-password-de-render>` y `<tu-stripe-*>` por los valores reales. En Render (u otro host), configura las mismas variables en el panel de Environment del servicio.
 
 ## Instalación
 
@@ -57,26 +71,62 @@ STRIPE_WEBHOOK_SECRET=
 npm install
 ```
 
-## Ejecución
+## Ejecución en desarrollo
 
 ```bash
 npm run start:dev
 ```
 
-Producción:
+## Ejecución en producción
 
 ```bash
 npm run build
 npm run start:prod
 ```
 
-## API de Referencia
+El servidor se inicia por defecto en `http://localhost:3000` (o en el puerto definido en `PORT`), con la API y Swagger disponibles bajo el prefijo `/api`.
 
-Base URL con prefijo: `/api`
+## Despliegue en Render
+
+1. **Subir el código a GitHub**  
+   El Web Service de Render despliega desde el repositorio. Después de cambiar código:
+   ```bash
+   git add .
+   git commit -m "Descripción del cambio"
+   git push origin main
+   ```
+   Render puede hacer deploy automático al detectar el push, o puedes lanzar un **Manual Deploy** desde el dashboard.
+
+2. **Crear la base de datos**  
+   En Render: New → PostgreSQL, crear la instancia y anotar host, puerto, base de datos, usuario y contraseña (o la Internal Database URL).
+
+3. **Crear el Web Service**  
+   New → Web Service, conectar el repo de GitHub (p. ej. `garfdev42/back-donations`).
+
+4. **Comandos de build y arranque**
+   - **Build Command**: `npm install && npm run build`
+   - **Start Command**: `npm run start:prod`  
+   No uses `npm run start` (modo dev): en el plan free puede provocar *heap out of memory* y no abre puerto.
+
+5. **Variables de entorno**  
+   En el Web Service → **Environment**, añadir (con los valores reales de tu BD y Stripe):
+   - `NODE_ENV=production`
+   - `DB_HOST`, `DB_PORT`, `DB_USERNAME`, `DB_PASSWORD`, `DB_NAME`  
+     **O bien** enlazar la base de datos al servicio en Render para que se inyecte `DATABASE_URL` (la app la usa automáticamente).
+   - `DB_SYNC=false` en producción (o `true` solo para que TypeORM cree/actualice tablas al arrancar).
+   - `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_CURRENCY=usd`
+   - `CORS_ORIGINS=https://fundacion-futuro-verde.vercel.app`  
+   El puerto lo define Render con `PORT`; no hace falta ponerlo si Render lo inyecta.
+
+**Resumen:** push a `main` → Render clona, ejecuta build y luego `npm run start:prod`; la app lee `PORT` y las variables de entorno (incl. `DATABASE_URL` o `DB_*`) para conectar a PostgreSQL y Stripe.
+
+## API de referencia
+
+Base URL con prefijo global: `/api`
 
 ### Donors
 
-- POST `/api/donors/create`
+- **POST** `/api/donors/create`
 
 Body:
 
@@ -88,9 +138,11 @@ Body:
 }
 ```
 
+Crea un nuevo donante o reutiliza uno existente con el mismo email.
+
 ### Donations
 
-- POST `/api/donations/create` — crea donación y devuelve `paymentUrl` de Stripe
+- **POST** `/api/donations/create` — crea una donación y devuelve la `paymentUrl` de Stripe
 
 Body:
 
@@ -124,12 +176,12 @@ Respuesta:
 }
 ```
 
-- GET `/api/donations` — lista donaciones
-- GET `/api/donations/:id` — detalle
+- **GET** `/api/donations` — lista todas las donaciones
+- **GET** `/api/donations/:id` — detalle de una donación por `id`
 
 ### Contacts
 
-- POST `/api/contacts/create`
+- **POST** `/api/contacts/create`
 
 Body:
 
@@ -142,45 +194,47 @@ Body:
 }
 ```
 
+- **GET** `/api/contacts` — lista todos los mensajes de contacto
+
 ### Stripe Webhook
 
-- POST `/api/stripe/webhook`
+- **POST** `/api/stripe/webhook`
 
-Procesa `checkout.session.completed` y marca la donación como `COMPLETED` usando `stripeSessionId`.
+Procesa eventos `checkout.session.completed` y marca la donación como `COMPLETED` utilizando el `stripeSessionId` asociado a la sesión de pago.
 
-## Flujo de Pago
+## Flujo de pago
 
-1. Cliente llama a `POST /api/donations/create`
-2. API crea la donación (`PENDING`) y devuelve `paymentUrl`
-3. Frontend redirige a `paymentUrl`
-4. Stripe envía `checkout.session.completed` al webhook
-5. API marca la donación como `COMPLETED`
+1. El frontend llama a `POST /api/donations/create`.
+2. La API crea la donación con estado `PENDING` y devuelve la `paymentUrl` de Stripe.
+3. El frontend redirige al usuario a `paymentUrl`.
+4. Stripe envía el evento `checkout.session.completed` al webhook configurado.
+5. La API marca la donación como `COMPLETED`.
 
-## Buenas Prácticas Aplicadas
+## Buenas prácticas aplicadas
 
 - Validación y tipado de DTOs
-- Respuestas consistentes
-- Separación por módulos y responsabilidades
+- Respuestas consistentes y tipadas
+- Separación por módulos y responsabilidades claras
 - No exposición de datos sensibles en mensajes de error
-- Control de conflictos de identidad y correo en donantes
+- Manejo de conflictos de identidad/correo en donantes
 
 ## Seguridad
 
-- No subir `.env` ni secretos
-- Validar firma del webhook con `STRIPE_WEBHOOK_SECRET`
-- Usar HTTPS en producción
+- No subir `.env` ni secretos al repositorio
+- Posibilidad de validar la firma del webhook mediante `STRIPE_WEBHOOK_SECRET`
+- Uso de HTTPS en entornos de producción
 
 ## Scripts
 
-- `npm run start:dev` — desarrollo
-- `npm run build` — compilar
-- `npm run start:prod` — producción
-- `npm run lint` — lint
-- `npm run test` — tests
+- `npm run start:dev` — entorno de desarrollo
+- `npm run build` — compilación a JavaScript
+- `npm run start:prod` — ejecución en producción
+- `npm run lint` — análisis estático de código
+- `npm run test` — ejecución de tests unitarios
 
 ## Troubleshooting
 
-- Webhook de Stripe: asegure que el endpoint sea accesible públicamente o use Stripe CLI para reenviar eventos en local.
+- Para probar el webhook de Stripe en local, asegure que el endpoint sea accesible públicamente o utilice Stripe CLI para reenviar eventos hacia `http://localhost:<PORT>/api/stripe/webhook`.
 
 ## Licencia
 
