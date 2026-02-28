@@ -1,7 +1,6 @@
 # Donations API
 
-Backend para la gestión de donaciones de la prueba técnica de **Fundación Futuro Verde**.  
-Está construido con NestJS, TypeORM y Stripe Checkout, expone endpoints REST para crear donantes, donaciones y mensajes de contacto e integra un flujo de pago seguro con Stripe.
+Backend para la gestión de donaciones de la prueba técnica de **Fundación Futuro Verde**. Construido con NestJS, TypeORM y Stripe Checkout. Expone una API REST para crear donantes, donaciones y mensajes de contacto, e integra el flujo de pago con Stripe. Desplegado en **Render**; el frontend está en Vercel (`fundacion-futuro-verde`).
 
 ## Características
 
@@ -11,8 +10,9 @@ Está construido con NestJS, TypeORM y Stripe Checkout, expone endpoints REST pa
 - **Modelo de dominio alineado al enunciado**: Donor, Donation, Contact
 - **Donaciones con estados** (`PENDING`, `COMPLETED`)
 - **Integración con Stripe Checkout** (creación de sesión de pago + webhook)
-- **Persistencia en PostgreSQL** usando TypeORM con `autoLoadEntities`
-- **Documentación OpenAPI/Swagger** disponible en `/api`
+- **Persistencia en PostgreSQL** con TypeORM y `autoLoadEntities`
+- **Conexión a BD flexible**: usa `DATABASE_URL` (p. ej. al enlazar la BD en Render) o variables `DB_HOST`, `DB_PORT`, etc.
+- **Documentación OpenAPI/Swagger** en `/api`
 
 ## Stack tecnológico
 
@@ -39,21 +39,21 @@ Está construido con NestJS, TypeORM y Stripe Checkout, expone endpoints REST pa
 
 ## Configuración (.env)
 
-El archivo `.env` no debe subirse al repositorio (está en `.gitignore`).
+El archivo `.env` no se sube al repositorio (está en `.gitignore`).
 
-**Conexión a base de datos:** la app admite dos formas:
+**Conexión a la base de datos:**
 
-- **`DATABASE_URL`**: si está definida (p. ej. al enlazar la BD en Render), se usa esta URL y no hacen falta `DB_HOST`, etc.
-- **Variables sueltas**: si no hay `DATABASE_URL`, se usan `DB_HOST`, `DB_PORT`, `DB_USERNAME`, `DB_PASSWORD`, `DB_NAME`.
+- Si existe **`DATABASE_URL`** (p. ej. al enlazar la BD en Render), la app la usa y no hace falta definir `DB_HOST`, etc.
+- Si no hay `DATABASE_URL`, se usan **`DB_HOST`**, **`DB_PORT`**, **`DB_USERNAME`**, **`DB_PASSWORD`**, **`DB_NAME`**.
 
-Variables necesarias:
+**Variables de entorno:**
 
 ```bash
 NODE_ENV=development
 DB_HOST=dpg-d6gv9794tr6s73bhn8d0-a
 DB_PORT=5432
 DB_USERNAME=donations_db_zorv_user
-DB_PASSWORD=<tu-password-de-render>
+DB_PASSWORD=<password-de-tu-bd>
 DB_NAME=donations_db_zorv
 DB_SYNC=true
 STRIPE_SECRET_KEY=<tu-stripe-secret-key>
@@ -63,7 +63,7 @@ CORS_ORIGINS=https://fundacion-futuro-verde.vercel.app
 PORT=3000
 ```
 
-Sustituye `<tu-password-de-render>` y `<tu-stripe-*>` por los valores reales. En Render (u otro host), configura las mismas variables en el panel de Environment del servicio.
+Sustituye los valores entre `< >` por los reales. En Render, configura estas mismas variables en **Environment** del Web Service (o enlaza la BD para que se inyecte `DATABASE_URL`).
 
 ## Instalación
 
@@ -88,37 +88,50 @@ El servidor se inicia por defecto en `http://localhost:3000` (o en el puerto def
 
 ## Despliegue en Render
 
-1. **Subir el código a GitHub**  
-   El Web Service de Render despliega desde el repositorio. Después de cambiar código:
-   ```bash
-   git add .
-   git commit -m "Descripción del cambio"
-   git push origin main
-   ```
-   Render puede hacer deploy automático al detectar el push, o puedes lanzar un **Manual Deploy** desde el dashboard.
+El backend se despliega como **Web Service** en Render; la base de datos es un **PostgreSQL** en la misma cuenta (enlazado o con variables manuales).
 
-2. **Crear la base de datos**  
-   En Render: New → PostgreSQL, crear la instancia y anotar host, puerto, base de datos, usuario y contraseña (o la Internal Database URL).
+### 1. Subir cambios a GitHub
 
-3. **Crear el Web Service**  
-   New → Web Service, conectar el repo de GitHub (p. ej. `garfdev42/back-donations`).
+Render construye y despliega desde el repo. Para aplicar cambios:
 
-4. **Comandos de build y arranque**
-   - **Build Command**: `npm install && npm run build`
-   - **Start Command**: `npm run start:prod`  
-   No uses `npm run start` (modo dev): en el plan free puede provocar *heap out of memory* y no abre puerto.
+```bash
+git add .
+git commit -m "Descripción del cambio"
+git push origin main
+```
 
-5. **Variables de entorno**  
-   En el Web Service → **Environment**, añadir (con los valores reales de tu BD y Stripe):
-   - `NODE_ENV=production`
-   - `DB_HOST`, `DB_PORT`, `DB_USERNAME`, `DB_PASSWORD`, `DB_NAME`  
-     **O bien** enlazar la base de datos al servicio en Render para que se inyecte `DATABASE_URL` (la app la usa automáticamente).
-   - `DB_SYNC=false` en producción (o `true` solo para que TypeORM cree/actualice tablas al arrancar).
-   - `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_CURRENCY=usd`
-   - `CORS_ORIGINS=https://fundacion-futuro-verde.vercel.app`  
-   El puerto lo define Render con `PORT`; no hace falta ponerlo si Render lo inyecta.
+Luego se puede hacer **Manual Deploy** en el dashboard o dejar el deploy automático.
 
-**Resumen:** push a `main` → Render clona, ejecuta build y luego `npm run start:prod`; la app lee `PORT` y las variables de entorno (incl. `DATABASE_URL` o `DB_*`) para conectar a PostgreSQL y Stripe.
+### 2. Base de datos
+
+En Render: **New → PostgreSQL**. Anotar la **Internal Database URL** (o host, puerto, usuario, contraseña y nombre de BD). Opcionalmente **enlazar** esta BD al Web Service para que se inyecte `DATABASE_URL`.
+
+### 3. Web Service
+
+**New → Web Service**, conectar el repo (p. ej. `garfdev42/back-donations`).
+
+### 4. Comandos
+
+- **Build Command:** `npm install && npm run build`
+- **Start Command:** `npm run start:prod`
+
+Importante: usar **`npm run start:prod`**, no `npm run start`. En plan free, `npm run start` (modo dev) puede provocar *heap out of memory* y que no se detecte el puerto.
+
+### 5. Variables de entorno
+
+En el Web Service → **Environment**:
+
+- `NODE_ENV=production`
+- Conexión a BD: o bien **enlazar la BD** (se inyecta `DATABASE_URL`) o bien definir `DB_HOST`, `DB_PORT`, `DB_USERNAME`, `DB_PASSWORD`, `DB_NAME`
+- `DB_SYNC=false` en producción (o `true` si quieres que TypeORM sincronice el esquema al arrancar)
+- `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_CURRENCY=usd`
+- `CORS_ORIGINS=https://fundacion-futuro-verde.vercel.app`
+
+Render inyecta `PORT`; no es obligatorio definirlo a mano.
+
+### Resumen del flujo
+
+Push a `main` → Render clona el repo → ejecuta el build → arranca con `npm run start:prod` → la app usa `PORT` y `DATABASE_URL` (o `DB_*`) para conectar a PostgreSQL.
 
 ## API de referencia
 
